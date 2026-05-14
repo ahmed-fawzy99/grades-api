@@ -95,3 +95,7 @@ route:
   parentNamespace: traefik
   sectionName: api
   hostnames: []
+  # When true, also render an HTTPRoute on the Gateway's `web` (port 80)
+  # listener that 301s every request to https. Prod sets this to true; local
+  # leaves it off so `http://localhost/...` actually reaches the app.
+  enforceHttps: false

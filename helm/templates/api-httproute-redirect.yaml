@@ -1,0 +1,28 @@
+{{- if .Values.route.enforceHttps }}
+# HTTP→HTTPS enforcement at the route level. Always attaches to the `web`
+# (port 80) listener regardless of which listener serves the real traffic.
+# Replaces the entrypoint-level Traefik redirect, which used to 301 every
+# request including local dev where `websecure` has no valid cert.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .Values.microservice.name }}-redirect
+  namespace: {{ .Values.microservice.namespace }}
+  labels:
+    {{- include "grades-api.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - name: {{ .Values.route.parentName }}
+      namespace: {{ .Values.route.parentNamespace }}
+      sectionName: web
+  {{- with .Values.route.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+{{- end }}

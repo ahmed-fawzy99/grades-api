@@ -38,13 +38,21 @@ spec:
             - secretRef:
                 name: {{ .Values.secretName }}
             {{- end }}
-            {{- if .Values.postgres.dedicated }}
-            - secretRef:
-                name: {{ .Values.postgres.owner }}.{{ include "grades-api.postgresName" . }}.credentials.postgresql.acid.zalan.do
-            {{- end }}
           env:
             - name: AUTORUN_ENABLED
               value: "false"
+            {{- if .Values.postgres.dedicated }}
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.owner }}.{{ include "grades-api.postgresName" . }}.credentials.postgresql.acid.zalan.do
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.owner }}.{{ include "grades-api.postgresName" . }}.credentials.postgresql.acid.zalan.do
+                  key: password
+            {{- end }}
           livenessProbe:
             exec:
               command: ["healthcheck-schedule"]

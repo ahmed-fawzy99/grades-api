@@ -8,7 +8,7 @@ namespace:
     preview: "true"
 
 image:
-  repository: ghcr.io/ahmaddeghady/grades-api
+  repository: ghcr.io/ahmed-fawzy99/grades-api
   tag: pr-placeholder
   pullPolicy: IfNotPresent
 

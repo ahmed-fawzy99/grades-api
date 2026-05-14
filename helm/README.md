@@ -28,22 +28,87 @@ helm/
 
 | Overlay | Image | Replicas | HPA | Scheduler | Postgres |
 |---|---|---|---|---|---|
-| `values.yaml` (local) | `localhost:5000/grades-api:latest` | 3 | yes | yes | shared |
+| `values.yaml` (base, not used directly) | `localhost:5000/grades-api:latest` | 3 | yes | yes | shared |
+| `values-local.yaml` | `grades-api:local` (Docker Desktop daemon, `pullPolicy: Never`) | 1 | no | yes | dedicated tiny CR |
 | `values-prod.yaml` | `ghcr.io/<owner>/grades-api:sha-<short>` | 3 → 10 | yes | yes | shared (DOKS) |
 | `values-preview.yaml` | `ghcr.io/<owner>/grades-api:pr-<n>-<sha>` | 1 | no | no | dedicated tiny CR |
 
 The image tag in `values-prod.yaml` is rewritten by CI on every push to `main`
 (`.github/workflows/ci.yml`, job `update-helm-values`). Don't edit it by hand.
 
-## Install locally
+## Install locally (Docker Desktop)
+
+Local dev uses a dedicated overlay, `values-local.yaml`. It builds the image
+into Docker Desktop's shared daemon (no registry needed), provisions Postgres
+via the Zalando operator that the GitOps bootstrap installs, and reuses the
+shared Redis cluster in `ot-operators`. The web tier is exposed through the
+same Gateway API path as prod — Traefik's `web` (HTTP) listener publishes on
+`http://localhost/...` because Docker Desktop binds the Traefik LoadBalancer
+Service to the host. HTTPS is prod-only (needs a Cloudflare-issued cert).
+
+Prereqs:
+1. `kubectl config use-context docker-desktop`
+2. The GitOps bootstrap has run on this cluster — `sealed-secrets`,
+   `cert-manager`, `traefik`, `postgres-operator`, `redis-operator`,
+   `redis-replication`, and `gateway-routes` Applications all show
+   `Synced/Healthy` (except websecure listener TLS — that needs Cloudflare).
+   See `../../grades-gitops/README.md`.
 
 ```sh
-# from api/
-kubectl config use-context docker-desktop
-helm upgrade --install grades-api ./helm -n grades --create-namespace
-kubectl -n grades rollout status deploy/grades-api --timeout=180s
-curl -i http://localhost:8081/up        # 200 OK from Octane
+# 1) Build the image into Docker Desktop's daemon (which Kubernetes shares).
+docker build -t grades-api:local .
+
+# 2) Create the namespace and the plain Secret. Generate APP_KEY first.
+kubectl create namespace grades
+
+APP_KEY="base64:$(openssl rand -base64 32)"
+cat > /tmp/grades-local.env <<EOF
+APP_KEY=$APP_KEY
+APP_NAME=Grades
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=http://localhost:8081
+LOG_CHANNEL=stack
+LOG_LEVEL=debug
+BCRYPT_ROUNDS=12
+DB_CONNECTION=pgsql
+DB_HOST=grades-api-pg.grades.svc.cluster.local
+DB_PORT=5432
+DB_DATABASE=grades_db
+SESSION_DRIVER=database
+QUEUE_CONNECTION=redis
+CACHE_STORE=redis
+BROADCAST_CONNECTION=log
+FILESYSTEM_DISK=local
+REDIS_CLIENT=phpredis
+REDIS_HOST=redis-replication-master.ot-operators.svc.cluster.local
+REDIS_PORT=6379
+REDIS_PASSWORD=null
+MAIL_MAILER=log
+EOF
+
+# DB_USERNAME / DB_PASSWORD are injected by the chart from the Zalando-
+# generated Secret — don't put them in this file (see "Gotchas" below).
+
+kubectl -n grades create secret generic grades-api-secrets \
+  --from-env-file=/tmp/grades-local.env
+
+# 3) Install the chart.
+helm upgrade --install grades-api ./helm -n grades -f ./helm/values-local.yaml
+
+# 4) Wait for the API tier.
+kubectl -n grades wait --for=condition=ready pod \
+  -l app.kubernetes.io/component=backend --timeout=180s
+
+# 5) Hit it through the Gateway. Docker Desktop binds Traefik's LoadBalancer
+#    Service to host port 8080 (EXTERNAL-IP shows `localhost`).
+curl -i http://localhost:8080/up                 # 200 OK from Octane
+curl -s http://localhost:8080/api/v1/grades | jq # the actual API
 ```
+
+To tear down: `helm -n grades uninstall grades-api && kubectl delete ns grades`.
+The Postgres PVC survives the namespace delete — clean up with
+`kubectl get pv` if you want a totally fresh DB.
 
 ## Install in production
 
@@ -122,13 +187,16 @@ For details on the full workflow, rotation, and what's safe to commit, see
 
 ## How `postgres.dedicated` works
 
-When `true` (preview only), the chart renders an extra Zalando `postgresql`
+When `true` (preview + local), the chart renders an extra Zalando `postgresql`
 CR named `{release}-pg`. The operator provisions a 1-instance Postgres and
-creates a Secret named `<owner>.<cluster>.credentials.postgresql.acid.zalan.do`.
-Our Deployments load this Secret as a second `envFrom` so `DB_USERNAME` /
-`DB_PASSWORD` are available without manual wiring. The `.env`-style Secret
-still needs `DB_HOST=<release>-pg.<namespace>.svc.cluster.local` and the
-other DB settings.
+creates a Secret named `<owner>.<cluster>.credentials.postgresql.acid.zalan.do`
+containing two keys: `username` and `password`.
+
+The Deployments project those two keys into the env as `DB_USERNAME` /
+`DB_PASSWORD` via `valueFrom.secretKeyRef` — a plain `envFrom` would expose
+them under the operator's raw key names (`username`/`password`) and Laravel
+wouldn't see them. The `.env`-style Secret still needs `DB_HOST` (`<release>-pg.<namespace>.svc.cluster.local`),
+`DB_PORT`, `DB_DATABASE`, `DB_CONNECTION=pgsql`, and `APP_KEY`/`REDIS_*`.
 
 ## Gotchas
 
@@ -140,3 +208,21 @@ other DB settings.
 - **HPA needs metrics-server** — DOKS doesn't bundle it; the ArgoCD bootstrap
   doesn't either. Install separately if missing:
   `helm install metrics-server metrics-server/metrics-server -n kube-system`.
+  `values-local.yaml` disables autoscaling for this reason.
+- **Local access goes through Traefik's `web` listener on host :8080** —
+  Docker Desktop binds the Traefik LoadBalancer Service to localhost. The
+  `web` listener serves plain HTTP; the `websecure` listener exists but has
+  no usable cert locally (DNS-01 via Cloudflare is prod-only). HTTPS
+  enforcement on prod is done at the HTTPRoute level via
+  `route.enforceHttps=true` (Gateway API `RequestRedirect` filter), not at
+  the Traefik entrypoint, so local stays reachable.
+- **`grades-api-secrets` must exist before `helm install`** — the API,
+  Horizon, and Scheduler Deployments load it via `envFrom`. If the Secret is
+  missing, pods stay in `CreateContainerConfigError`. Create it first; the
+  chart never creates a plain Secret itself (it only inlines a SealedSecret
+  when `sealedSecret.enabled=true`).
+- **DB credentials come from two places** — `DB_HOST`/`DB_PORT`/`DB_DATABASE`
+  live in `grades-api-secrets` (envFrom); `DB_USERNAME`/`DB_PASSWORD` are
+  pulled from the Zalando-generated Secret via explicit `secretKeyRef`. Do
+  not duplicate the latter pair in `grades-api-secrets` or you'll get a
+  startup-order race.

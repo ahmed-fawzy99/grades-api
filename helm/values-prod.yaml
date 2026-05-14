@@ -6,7 +6,7 @@ microservice:
   namespace: grades-prod
 image:
   repository: ghcr.io/ahmed-fawzy99/grades-api
-  tag: sha-2259544
+  tag: sha-fea5373
 imagePullSecrets:
   - name: ghcr-creds
 # Prod env loads APP_KEY, DB_*, REDIS_*, etc. from helm/secrets/prod.sealed.yaml.

@@ -7,8 +7,7 @@ microservice:
 
 image:
   repository: ghcr.io/ahmed-fawzy99/grades-api
-  tag: sha-3ef6de4
-
+  tag: sha-1c1a956
 imagePullSecrets:
   - name: ghcr-creds
 

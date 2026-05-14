@@ -1,0 +1,53 @@
+*.log
+.DS_Store
+.env
+.env.backup
+
+# Claude Code per-user settings (the .claude/ folder otherwise contains
+# shared project skills which we DO want committed).
+.claude/settings.local.json
+# Any .env.* (.env.prod, .env.preview, .env.local, ...) is plaintext input
+# to `kubeseal` or `kubectl create secret`. NEVER commit these — commit the
+# encrypted output under helm/secrets/ instead. .env.example is the only
+# allowed checked-in template.
+.env.*
+!.env.example
+.phpactor.json
+.phpunit.result.cache
+/.codex
+/.cursor/
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/node_modules
+/public/build
+/public/fonts-manifest.dev.json
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+_ide_helper.php
+Homestead.json
+Homestead.yaml
+Thumbs.db
+
+**/caddy
+frankenphp
+frankenphp-worker.php
+
+# ---------------------------------------------------------------------------
+# Secrets (Sealed Secrets workflow)
+# ---------------------------------------------------------------------------
+# helm/secrets/ holds sealed (encrypted) Secret YAMLs that ARE safe to commit
+# — they can only be decrypted by the cluster's sealed-secrets controller.
+# To prevent accidentally committing a plain Secret produced during the
+# `kubeseal` workflow, everything in that folder is ignored EXCEPT files that
+# match the expected sealed-output naming.
+helm/secrets/*
+!helm/secrets/*.sealed.yaml
+!helm/secrets/README.md
+!helm/secrets/.gitkeep

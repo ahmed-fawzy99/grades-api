@@ -1,0 +1,58 @@
+{{- if .Values.horizon.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.microservice.name }}-horizon
+  namespace: {{ .Values.microservice.namespace }}
+  labels:
+    {{- include "grades-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: queue
+spec:
+  replicas: {{ .Values.horizon.replicas }}
+  selector:
+    matchLabels:
+      {{- include "grades-api.tierSelector" (list . "horizon") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grades-api.labels" . | nindent 8 }}
+        app.kubernetes.io/component: queue
+        {{- include "grades-api.tierSelector" (list . "horizon") | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.horizon.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: horizon
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["php", "/var/www/html/artisan", "horizon"]
+          envFrom:
+            {{- if .Values.secretName }}
+            - secretRef:
+                name: {{ .Values.secretName }}
+            {{- end }}
+            {{- if .Values.postgres.dedicated }}
+            - secretRef:
+                name: {{ .Values.postgres.owner }}.{{ include "grades-api.postgresName" . }}.credentials.postgresql.acid.zalan.do
+            {{- end }}
+          env:
+            # Migrations belong to the web tier; this pod must never race them.
+            - name: AUTORUN_ENABLED
+              value: "false"
+          livenessProbe:
+            exec:
+              command: ["healthcheck-horizon"]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              memory: {{ .Values.horizon.resources.memory }}
+              cpu: {{ .Values.horizon.resources.cpu }}
+            limits:
+              memory: {{ .Values.horizon.resources.maxMemory }}
+{{- end }}

@@ -1,0 +1,52 @@
+# Preview overlay: minimal resources, no autoscaling, dedicated Postgres CR.
+# Per-PR values (image.tag, hostnames, namespace) are injected by the ArgoCD
+# ApplicationSet (argo/appsets/pr-previews.yaml) via .spec.template helm parameters.
+
+namespace:
+  create: true
+  labels:
+    preview: "true"
+
+image:
+  repository: ghcr.io/ahmaddeghady/grades-api
+  tag: pr-placeholder
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ghcr-creds
+
+workload:
+  replicas: 1
+  resources:
+    memory: "128Mi"
+    maxMemory: "256Mi"
+    cpu: "100m"
+
+autoscaling:
+  enabled: false
+
+horizon:
+  enabled: true
+  replicas: 1
+  resources:
+    memory: "128Mi"
+    maxMemory: "256Mi"
+    cpu: "100m"
+
+# No scheduler in previews — saves a pod and previews don't need cron.
+scheduler:
+  enabled: false
+
+postgres:
+  dedicated: true
+  instances: 1
+  storageSize: 500Mi
+  version: "17"
+  database: grades_db
+  owner: postroot
+
+route:
+  sectionName: preview
+  # ApplicationSet substitutes hostnames[0] with pr-{n}.preview.ahmaddeghady.com
+  hostnames:
+    - pr-placeholder.preview.ahmaddeghady.com

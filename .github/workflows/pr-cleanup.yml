@@ -1,0 +1,28 @@
+name: PR cleanup
+
+# When a PR closes, drop its preview image tags from GHCR so the registry
+# doesn't accumulate orphans. The preview namespace and Postgres CR are
+# torn down automatically by the ArgoCD ApplicationSet (prune=true).
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  packages: write
+
+jobs:
+  delete-pr-images:
+    runs-on: ubuntu-latest
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Delete GHCR tags for this PR
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: grades-api
+          package-type: container
+          delete-only-untagged-versions: false
+          min-versions-to-keep: 0
+          # Keep everything that does NOT start with pr-{N}- ; delete the rest.
+          ignore-versions: '^(?!pr-${{ github.event.pull_request.number }}-).*$'
+        continue-on-error: true

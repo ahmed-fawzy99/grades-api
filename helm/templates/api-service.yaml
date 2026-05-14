@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.microservice.name }}
+  namespace: {{ .Values.microservice.namespace }}
+  labels:
+    {{- include "grades-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  selector:
+    {{- include "grades-api.tierSelector" (list . "backend") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.workload.port }}
+      targetPort: http

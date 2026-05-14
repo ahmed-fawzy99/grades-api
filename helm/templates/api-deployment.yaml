@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.microservice.name }}
+  namespace: {{ .Values.microservice.namespace }}
+  labels:
+    {{- include "grades-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.workload.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "grades-api.tierSelector" (list . "backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grades-api.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+        {{- include "grades-api.tierSelector" (list . "backend") | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.workload.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.microservice.name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["php", "artisan", "octane:start",
+                 "--server={{ .Values.octaneServer }}", "--host=0.0.0.0", "--port={{ .Values.workload.port }}",
+                 "--workers=auto", "--max-requests=1000"]
+          envFrom:
+            {{- if .Values.secretName }}
+            - secretRef:
+                name: {{ .Values.secretName }}
+            {{- end }}
+            {{- if .Values.postgres.dedicated }}
+            - secretRef:
+                # Zalando operator generates this Secret for the owner role.
+                name: {{ .Values.postgres.owner }}.{{ include "grades-api.postgresName" . }}.credentials.postgresql.acid.zalan.do
+            {{- end }}
+          env:
+            # Only the web tier runs Laravel automations. Migration isolation
+            # makes the replicas race for a cache lock — winner migrates,
+            # losers skip. Horizon and Scheduler keep AUTORUN_ENABLED=false.
+            - name: AUTORUN_ENABLED
+              value: "true"
+            - name: AUTORUN_LARAVEL_MIGRATION_ISOLATION
+              value: "true"
+            - name: OCTANE_SERVER
+              value: {{ .Values.octaneServer | quote }}
+            - name: HEALTHCHECK_PATH
+              value: /up
+            - name: PHP_OPCACHE_ENABLE
+              value: "1"
+            - name: PHP_OPCACHE_VALIDATE_TIMESTAMPS
+              value: "0"
+            - name: PHP_OPCACHE_INTERNED_STRINGS_BUFFER
+              value: "32"
+            - name: PHP_OPCACHE_MAX_ACCELERATED_FILES
+              value: "20000"
+            - name: PHP_MEMORY_LIMIT
+              value: 256M
+          livenessProbe:
+            httpGet:
+              path: /up
+              port: {{ .Values.workload.port }}
+            initialDelaySeconds: {{ .Values.workload.livenessInitialDelay }}
+            periodSeconds: {{ .Values.workload.probePeriod }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.workload.port }}
+            periodSeconds: {{ .Values.workload.probePeriod }}
+          resources:
+            requests:
+              memory: {{ .Values.workload.resources.memory }}
+              cpu: {{ .Values.workload.resources.cpu }}
+            limits:
+              memory: {{ .Values.workload.resources.maxMemory }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.workload.port }}

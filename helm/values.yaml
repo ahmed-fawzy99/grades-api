@@ -1,0 +1,97 @@
+# Base values: local docker-desktop development.
+# Override per-environment via values-prod.yaml or values-preview.yaml.
+
+microservice:
+  name: grades-api
+  namespace: grades
+
+# When true, the chart renders the target Namespace (with the labels below).
+# Local dev and prod expect the namespace to exist already; previews need
+# it created with the `preview: "true"` label so the Gateway's preview
+# listener allows their HTTPRoute (see argo/apps/infra/manifests/gateway.yaml).
+namespace:
+  create: false
+  labels: {}
+
+image:
+  repository: localhost:5000/grades-api
+  tag: latest
+  pullPolicy: Always
+
+# When set, deployments add imagePullSecrets and previews/prod can pull from GHCR.
+# Example: [{ name: ghcr-creds }]
+imagePullSecrets: []
+
+# Octane server binary. Must match the base image in api/Dockerfile.
+octaneServer: frankenphp
+
+# Name of the Secret (envFrom) that holds APP_KEY, DB_*, REDIS_*, etc.
+# Leave empty to skip the envFrom (useful in tests / contexts where only the
+# Zalando-generated Postgres Secret is needed). For prod, this is the same
+# Secret that the SealedSecret below decrypts to.
+secretName: grades-api-secrets
+
+# Sealed Secrets configuration.
+#   enabled:  when true, the chart inlines helm/secrets/{file}.sealed.yaml
+#             (produced by `kubeseal`) into the rendered manifests.
+#   file:     basename (without `.sealed.yaml`) of the file under helm/secrets/.
+#
+# Local dev keeps this OFF — you create the plain Secret out-of-band with
+# `kubectl create secret generic grades-api-secrets --from-env-file=.env`.
+# values-prod.yaml turns this ON and points at `prod`.
+# See helm/secrets/README.md for the generation command.
+sealedSecret:
+  enabled: false
+  file: ""
+
+workload:
+  replicas: 3
+  livenessInitialDelay: 15
+  probePeriod: 5
+  port: 8080
+  terminationGracePeriodSeconds: 30
+  resources:
+    memory: "256Mi"
+    maxMemory: "512Mi"
+    cpu: "200m"
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilization: 50
+
+horizon:
+  enabled: true
+  replicas: 1
+  terminationGracePeriodSeconds: 60
+  resources:
+    memory: "256Mi"
+    maxMemory: "1Gi"
+    cpu: "200m"
+
+scheduler:
+  enabled: true
+  # MUST stay at 1: multiple schedulers would fire every scheduled job twice.
+  replicas: 1
+  terminationGracePeriodSeconds: 30
+  resources:
+    memory: "128Mi"
+    maxMemory: "256Mi"
+    cpu: "100m"
+
+# Per-release Postgres CR (Zalando operator). When false, the app uses a shared
+# Postgres cluster referenced via DB_HOST in the Secret.
+postgres:
+  dedicated: false
+  instances: 1
+  storageSize: 1Gi
+  version: "17"
+  database: grades_db
+  owner: postroot
+
+route:
+  parentName: grades-gateway
+  parentNamespace: traefik
+  sectionName: api
+  hostnames: []

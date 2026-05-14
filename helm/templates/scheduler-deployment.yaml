@@ -1,0 +1,61 @@
+{{- if .Values.scheduler.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.microservice.name }}-scheduler
+  namespace: {{ .Values.microservice.namespace }}
+  labels:
+    {{- include "grades-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cron
+spec:
+  replicas: {{ .Values.scheduler.replicas }}
+  # Recreate prevents the rolling-update window where two scheduler pods
+  # could overlap and fire every scheduled task twice.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "grades-api.tierSelector" (list . "scheduler") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grades-api.labels" . | nindent 8 }}
+        app.kubernetes.io/component: cron
+        {{- include "grades-api.tierSelector" (list . "scheduler") | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.scheduler.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: scheduler
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["php", "/var/www/html/artisan", "schedule:work"]
+          envFrom:
+            {{- if .Values.secretName }}
+            - secretRef:
+                name: {{ .Values.secretName }}
+            {{- end }}
+            {{- if .Values.postgres.dedicated }}
+            - secretRef:
+                name: {{ .Values.postgres.owner }}.{{ include "grades-api.postgresName" . }}.credentials.postgresql.acid.zalan.do
+            {{- end }}
+          env:
+            - name: AUTORUN_ENABLED
+              value: "false"
+          livenessProbe:
+            exec:
+              command: ["healthcheck-schedule"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              memory: {{ .Values.scheduler.resources.memory }}
+              cpu: {{ .Values.scheduler.resources.cpu }}
+            limits:
+              memory: {{ .Values.scheduler.resources.maxMemory }}
+{{- end }}

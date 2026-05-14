@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+        "laravel-boost": {
+            "command": "/usr/bin/php",
+            "args": [
+                "/home/ahmed/Documents/dev_stuff/local/k8s/grades/grades-api/artisan",
+                "boost:mcp"
+            ]
+        }
+    }
+}

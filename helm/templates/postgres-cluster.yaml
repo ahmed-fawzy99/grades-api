@@ -1,0 +1,23 @@
+{{- if .Values.postgres.dedicated }}
+apiVersion: acid.zalan.do/v1
+kind: postgresql
+metadata:
+  name: {{ include "grades-api.postgresName" . }}
+  namespace: {{ .Values.microservice.namespace }}
+  labels:
+    {{- include "grades-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  teamId: grades
+  numberOfInstances: {{ .Values.postgres.instances }}
+  volume:
+    size: {{ .Values.postgres.storageSize }}
+  users:
+    {{ .Values.postgres.owner }}:
+      - superuser
+      - createdb
+  databases:
+    {{ .Values.postgres.database }}: {{ .Values.postgres.owner }}
+  postgresql:
+    version: {{ .Values.postgres.version | quote }}
+{{- end }}

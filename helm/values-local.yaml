@@ -1,0 +1,70 @@
+# Local docker-desktop overlay. Inherits and overrides values.yaml.
+#
+# Use:
+#   docker build -t grades-api:local .
+#   kubectl create ns grades
+#   kubectl -n grades create secret generic grades-api-secrets --from-env-file=.env.local
+#   helm upgrade --install grades-api ./helm -n grades -f ./helm/values-local.yaml
+#
+# The Zalando-managed Postgres lives in-cluster (postgres.dedicated=true) and
+# is reached via grades-api-pg.grades.svc.cluster.local. Redis comes from the
+# shared redis-replication cluster installed by the gitops bootstrap.
+#
+# Access: http://localhost:8080/api/v1/grades — Docker Desktop publishes
+# Traefik's LoadBalancer Service on the host's port 8080. The `web` listener
+# on the shared Gateway is the only HTTP-capable listener; HTTPS isn't wired
+# up locally (no Cloudflare cert).
+
+namespace:
+  create: false
+
+image:
+  repository: grades-api
+  tag: local
+  # Docker Desktop shares its image daemon with Kubernetes, so `docker build`
+  # is enough — no registry push needed. Never pull (no remote registry).
+  pullPolicy: Never
+
+workload:
+  replicas: 1
+  resources:
+    memory: "256Mi"
+    maxMemory: "512Mi"
+    cpu: "100m"
+
+# No metrics-server on docker-desktop by default → HPA stays Unknown forever.
+# Keep replicas fixed.
+autoscaling:
+  enabled: false
+
+horizon:
+  enabled: true
+  replicas: 1
+  resources:
+    memory: "128Mi"
+    maxMemory: "512Mi"
+    cpu: "100m"
+
+scheduler:
+  enabled: true
+  replicas: 1
+  resources:
+    memory: "64Mi"
+    maxMemory: "128Mi"
+    cpu: "50m"
+
+postgres:
+  dedicated: true
+  instances: 1
+  storageSize: 500Mi
+  version: "17"
+  database: grades_db
+  owner: postroot
+
+route:
+  # The shared Gateway in traefik/grades-gateway has HTTP listener "web"
+  # (port 8000 → exposed 80). It's the only listener that becomes
+  # Programmed without a valid TLS cert.
+  sectionName: web
+  # Empty hostnames → matches every host on the listener.
+  hostnames: []

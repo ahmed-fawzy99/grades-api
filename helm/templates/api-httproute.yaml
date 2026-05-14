@@ -7,7 +7,9 @@ metadata:
     {{- include "grades-api.labels" . | nindent 4 }}
 spec:
   parentRefs:
-    - name: {{ .Values.route.parentName }}
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ .Values.route.parentName }}
       namespace: {{ .Values.route.parentNamespace }}
       sectionName: {{ .Values.route.sectionName }}
   {{- with .Values.route.hostnames }}
@@ -20,5 +22,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: {{ .Values.microservice.name }}
+        - group: ""
+          kind: Service
+          name: {{ .Values.microservice.name }}
           port: {{ .Values.workload.port }}
+          weight: 1

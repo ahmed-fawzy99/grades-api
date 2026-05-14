@@ -12,7 +12,9 @@ metadata:
     {{- include "grades-api.labels" . | nindent 4 }}
 spec:
   parentRefs:
-    - name: {{ .Values.route.parentName }}
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ .Values.route.parentName }}
       namespace: {{ .Values.route.parentNamespace }}
       sectionName: web
   {{- with .Values.route.hostnames }}

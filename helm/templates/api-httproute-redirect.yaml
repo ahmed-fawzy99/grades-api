@@ -22,7 +22,11 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   rules:
-    - filters:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
         - type: RequestRedirect
           requestRedirect:
             scheme: https

@@ -58,6 +58,8 @@ spec:
             - name: APP_URL
               value: https://{{ index .Values.route.hostnames 0 }}
             {{- end }}
+            - name: REDIS_PREFIX
+              value: {{ .Values.microservice.namespace }}_
             # Only the web tier runs Laravel automations. Migration isolation
             # makes the replicas race for a cache lock — winner migrates,
             # losers skip. Horizon and Scheduler keep AUTORUN_ENABLED=false.

@@ -56,6 +56,8 @@ spec:
             - name: APP_URL
               value: https://{{ index .Values.route.hostnames 0 }}
             {{- end }}
+            - name: REDIS_PREFIX
+              value: {{ .Values.microservice.namespace }}_
           livenessProbe:
             exec:
               command: ["healthcheck-horizon"]

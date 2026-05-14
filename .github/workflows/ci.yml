@@ -67,8 +67,12 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          SHORT_SHA=$(git rev-parse --short HEAD)
+          # On pull_request events Actions checks out a merge commit, so
+          # `git rev-parse HEAD` returns the merge SHA, not the PR head SHA.
+          # The ApplicationSet's image.tag uses head_sha — match it here.
+          SHORT_SHA="${HEAD_SHA:0:7}"
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           if [[ "${EVENT_NAME}" == "pull_request" ]]; then
             echo "tag=pr-${PR_NUMBER}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"

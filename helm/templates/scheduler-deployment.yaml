@@ -52,6 +52,12 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.postgres.owner }}.{{ include "grades-api.postgresName" . }}.credentials.postgresql.acid.zalan.do
                   key: password
+            - name: DB_HOST
+              value: {{ include "grades-api.postgresName" . }}.{{ .Values.microservice.namespace }}.svc.cluster.local
+            {{- end }}
+            {{- if .Values.route.hostnames }}
+            - name: APP_URL
+              value: https://{{ index .Values.route.hostnames 0 }}
             {{- end }}
           livenessProbe:
             exec:

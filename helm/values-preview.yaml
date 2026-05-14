@@ -2,6 +2,14 @@
 # Per-PR values (image.tag, hostnames, namespace) are injected by the ArgoCD
 # ApplicationSet (argo/appsets/pr-previews.yaml) via .spec.template helm parameters.
 
+# Shared sealed Secret for all preview namespaces. Sealed with
+# `kubeseal --scope cluster-wide` so the same blob decrypts in every
+# grades-pr-* namespace. Holds APP_KEY, REDIS_HOST, etc. — DB_HOST and APP_URL
+# are templated by the chart per-PR.
+sealedSecret:
+  enabled: true
+  file: preview
+
 namespace:
   create: true
   labels:

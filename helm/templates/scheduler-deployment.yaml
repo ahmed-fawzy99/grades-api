@@ -8,6 +8,7 @@ metadata:
     {{- include "grades-api.labels" . | nindent 4 }}
     app.kubernetes.io/component: cron
 spec:
+  revisionHistoryLimit: 4
   replicas: {{ .Values.scheduler.replicas }}
   # Recreate prevents the rolling-update window where two scheduler pods
   # could overlap and fire every scheduled task twice.

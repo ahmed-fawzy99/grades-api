@@ -8,6 +8,7 @@ metadata:
     {{- include "grades-api.labels" . | nindent 4 }}
     app.kubernetes.io/component: queue
 spec:
+  revisionHistoryLimit: 4
   replicas: {{ .Values.horizon.replicas }}
   selector:
     matchLabels:

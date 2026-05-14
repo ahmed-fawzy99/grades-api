@@ -6,7 +6,7 @@ microservice:
   namespace: grades-prod
 
 image:
-  repository: ghcr.io/ahmaddeghady/grades-api
+  repository: ghcr.io/ahmed-fawzy99/grades-api
   tag: sha-3ef6de4
 
 imagePullSecrets:
@@ -47,9 +47,13 @@ scheduler:
     cpu: "100m"
 
 postgres:
-  dedicated: false
+  dedicated: true
 
 route:
   sectionName: websecure
   hostnames:
     - grades-api.ahmaddeghady.com
+  # Render a sibling HTTPRoute on `web` that 301s every HTTP request to HTTPS.
+  # Previously the Traefik chart did this at the entrypoint level — moved to
+  # the route so local dev can keep using the `web` listener.
+  enforceHttps: true
